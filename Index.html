@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard Kualitas Udara Cibeber</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(to right, #dfe9f3, #ffffff);
+      --card: #ffffff;
+      --text: #333333;
+      --good: #28a745;
+      --moderate: #ffc107;
+      --poor: #dc3545;
+      --blue: #007bff;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      color: var(--blue);
+      margin-bottom: 0.2rem;
+      font-size: 2.2rem;
+    }
+
+    p {
+      margin: 0 0 2rem;
+      font-size: 1.1rem;
+      color: #555;
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.2rem;
+      width: 100%;
+      max-width: 1100px;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .icon {
+      font-size: 2.2rem;
+      margin-bottom: 0.3rem;
+    }
+
+    .label {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      text-align: center;
+    }
+
+    .value {
+      font-size: 2.2rem;
+      font-weight: bold;
+      text-align: center;
+    }
+
+    .chart-container {
+      width: 100%;
+      max-width: 1000px;
+      margin-top: 3rem;
+      background: var(--card);
+      border-radius: 16px;
+      padding: 1rem;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+    }
+
+    canvas {
+      width: 100% !important;
+      height: auto !important;
+    }
+
+    .info-section {
+      max-width: 1000px;
+      margin-top: 2rem;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      background: var(--card);
+      padding: 1rem 1.5rem;
+      border-radius: 16px;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+    }
+
+    .info-section h2 {
+      color: var(--blue);
+      font-size: 1.2rem;
+    }
+
+    .info-section ul {
+      padding-left: 1.2rem;
+    }
+
+    .info-section li {
+      margin-bottom: 0.4rem;
+    }
+
+    footer {
+      margin-top: 3rem;
+      font-size: 0.9rem;
+      color: #888;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Dashboard Kualitas Udara</h1>
+  <p>Kelurahan Cibeber, Kota Cimahi</p>
+
+  <div class="dashboard">
+    <div class="card">
+      <div class="icon">🔥</div>
+      <div class="label">CO (MQ-9)</div>
+      <div class="value" id="co">--</div>
+      <div class="label" id="co-status">--</div>
+    </div>
+    <div class="card">
+      <div class="icon">🧪</div>
+      <div class="label">NH₃ (MQ-135)</div>
+      <div class="value" id="nh3">--</div>
+      <div class="label" id="nh3-status">--</div>
+    </div>
+    <div class="card">
+      <div class="icon">🌡️</div>
+      <div class="label">Suhu</div>
+      <div class="value" id="suhu">--</div>
+    </div>
+    <div class="card">
+      <div class="icon">💧</div>
+      <div class="label">Kelembaban</div>
+      <div class="value" id="kelembaban">--</div>
+    </div>
+    <div class="card">
+      <div class="icon">🌬️</div>
+      <div class="label">Kualitas Udara</div>
+      <div class="value" id="quality">--</div>
+    </div>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="sensorChart"></canvas>
+  </div>
+
+  <section class="info-section">
+    <ul>
+      <li><strong>CO (Karbon Monoksida)</strong>
+        <ul>
+          <li><strong>≤ 200 ppm</strong>: Baik</li>
+          <li><strong>201 – 400 ppm</strong>: Cukup (Perlu ventilasi)</li>
+          <li><strong>> 400 ppm</strong>: Buruk (Bahaya bagi kesehatan)</li>
+        </ul>
+      </li>
+      <li><strong>NH₃ (Amonia)</strong>
+        <ul>
+          <li><strong>≤ 150 ppm</strong>: Baik</li>
+          <li><strong>151 – 300 ppm</strong>: Cukup (Iritasi ringan mungkin terjadi)</li>
+          <li><strong>> 300 ppm</strong>: Buruk (Iritasi berat, bahaya bagi saluran napas)</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <script>
+    const firebaseURL = "https://suhu-8c0fd-default-rtdb.firebaseio.com/data.json";
+
+    const chartLabels = [], suhuData = [], humData = [], coData = [], nh3Data = [];
+
+    const ctx = document.getElementById('sensorChart').getContext('2d');
+    const sensorChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: chartLabels,
+        datasets: [
+          {
+            label: 'Suhu (°C)',
+            data: suhuData,
+            borderColor: '#007bff',
+            backgroundColor: 'rgba(0, 123, 255, 0.1)',
+            fill: true,
+            tension: 0.3
+          },
+          {
+            label: 'Kelembaban (%)',
+            data: humData,
+            borderColor: '#17a2b8',
+            backgroundColor: 'rgba(23, 162, 184, 0.1)',
+            fill: true,
+            tension: 0.3
+          },
+          {
+            label: 'CO (ppm)',
+            data: coData,
+            borderColor: '#dc3545',
+            backgroundColor: 'rgba(220, 53, 69, 0.1)',
+            fill: true,
+            tension: 0.3
+          },
+          {
+            label: 'NH₃ (ppm)',
+            data: nh3Data,
+            borderColor: '#ffc107',
+            backgroundColor: 'rgba(255, 193, 7, 0.1)',
+            fill: true,
+            tension: 0.3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: { title: { display: true, text: 'Waktu' } },
+          y: { beginAtZero: true }
+        }
+      }
+    });
+
+    async function ambilData() {
+      try {
+        const res = await fetch(firebaseURL);
+        const data = await res.json();
+
+        const waktu = new Date().toLocaleTimeString();
+        const suhu = data.suhu?.toFixed(1) || 0;
+        const hum = data.kelembaban?.toFixed(1) || 0;
+        const co = data.co_ppm || 0;
+        const nh3 = data.nh3_ppm || 0;
+
+        document.getElementById("suhu").innerText = suhu + " °C";
+        document.getElementById("kelembaban").innerText = hum + " %";
+        document.getElementById("co").innerText = co + " ppm";
+        document.getElementById("nh3").innerText = nh3 + " ppm";
+
+        let statusCO = co > 400 ? "Buruk" : co > 200 ? "Cukup" : "Baik";
+        let statusNH3 = nh3 > 300 ? "Buruk" : nh3 > 150 ? "Cukup" : "Baik";
+
+        document.getElementById("co-status").innerText = `Status: ${statusCO}`;
+        document.getElementById("co-status").style.color = getColor(statusCO);
+
+        document.getElementById("nh3-status").innerText = `Status: ${statusNH3}`;
+        document.getElementById("nh3-status").style.color = getColor(statusNH3);
+
+        let kualitas = "Baik";
+        if (statusCO === "Buruk" || statusNH3 === "Buruk") kualitas = "Buruk";
+        else if (statusCO === "Cukup" || statusNH3 === "Cukup") kualitas = "Cukup";
+
+        document.getElementById("quality").innerText = kualitas;
+        document.getElementById("quality").style.color = getColor(kualitas);
+
+        // Update grafik
+        if (chartLabels.length >= 10) {
+          chartLabels.shift(); suhuData.shift(); humData.shift(); coData.shift(); nh3Data.shift();
+        }
+        chartLabels.push(waktu);
+        suhuData.push(suhu);
+        humData.push(hum);
+        coData.push(co);
+        nh3Data.push(nh3);
+        sensorChart.update();
+      } catch (e) {
+        console.error("Gagal ambil data Firebase:", e);
+      }
+    }
+
+    function getColor(status) {
+      return status === "Baik" ? "var(--good)" :
+             status === "Cukup" ? "var(--moderate)" : "var(--poor)";
+    }
+
+    ambilData();
+    setInterval(ambilData, 5000);
+  </script>
+</body>
+</html>
